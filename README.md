@@ -31,6 +31,11 @@ Dependencies:
 pip install openai
 ```
 
+Activate:
+```bash
+source .venv/bin/activate
+```
+
 
 ### Configuration
 
