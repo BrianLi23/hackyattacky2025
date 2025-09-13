@@ -9,9 +9,24 @@ RESERVED_FIELDS = {
     "_prompt",
     "_prefix",
     "_entry",
+    "_runtime",
     "_getattr_impl",
     "RESERVED_FIELDS",
 }
+
+
+class Runtime:
+    def register_probing(self, probed: "Probed"):
+        pass
+
+    def listen_event(self, probed: "Probed", event_content: str, result: str) -> None:
+        pass
+
+    def should_be_interrupted(self, probed: "Probed", event_content: str) -> bool:
+        pass
+
+    def respond_event(self, probed: "Probed", event_content: str) -> str:
+        pass
 
 
 class Probed(Generic[T]):
@@ -20,6 +35,7 @@ class Probed(Generic[T]):
         obj: T,
         prompt: str = "",
         prefix: str = "",
+        runtime: Optional[Runtime] = None,
         entry: Optional["Probed[Any]"] = None,
     ) -> None:
         self._obj = obj
@@ -27,9 +43,12 @@ class Probed(Generic[T]):
         self._prefix = prefix
         if entry is not None:
             self._entry = entry
+            self._runtime = entry._runtime
         else:
             self._prefix = f"{obj.__class__.__name__}_{str(uuid.uuid4())[:8]}"
             self._entry = self
+            self._runtime = runtime
+            runtime.register_probing(self)
 
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
         data = json.dumps(
@@ -40,10 +59,13 @@ class Probed(Generic[T]):
             },
             indent=2,
         )
-        print(data)
-
-        result = self._obj(*args, **kwargs)
-        return result
+        should_be_interrupted = self._runtime.should_be_interrupted(self._entry, data)
+        if should_be_interrupted:
+            return self._runtime.respond_event(self._entry, data)
+        else:
+            result = self._obj(*args, **kwargs)
+            self._runtime.listen_event(self._entry, data, result)
+            return result
 
     def _getattr_impl(self, name: str) -> "Probed[Any]":
         print(f"__getattr__ called for {name}")
@@ -84,19 +106,14 @@ class Probed(Generic[T]):
     def __str__(self) -> Any:
         return self._getattr_impl("__str__")()
 
+    def __hash__(self) -> int:
+        return hash(self._prefix)
 
-def probe(value: T, name: str = "value") -> Probed[T]:
-    return Probed(value, name)
-
-
-def main() -> None:
-    my_list = probe([1, 2, 3], "be a good list :)")
-    my_list.append(4)
-    my_list.append(4)
-    my_list.append(4)
-    length = my_list.__len__()
-    print(f"Length: {length}")
+    def __eq__(self, other: Any) -> bool:
+        if isinstance(other, Probed):
+            return self._obj == other._obj
+        return self._obj == other
 
 
-if __name__ == "__main__":
-    main()
+def probe(value: T, prompt: str, runtime: Runtime) -> Probed[T]:
+    return Probed(value, prompt, runtime=runtime)
