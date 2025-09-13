@@ -29,7 +29,11 @@ def use_martian(message, instructions, context):
     )
 
     response = oai_client.chat.completions.create(
-        model="cohere/command-a",  # "cohere/command-r",# "google/gemini-2.5-flash",# "cohere/command-r7b-12-2024",
+        model="google/gemini-2.5-flash",# "cohere/command-r7b-12-2024",
         messages=messages,
     )
+    # print("model input:")
+    # print(message)
+    # print("model output:")
+    # print(response.choices[0].message.content)
     return response.choices[0].message.content

@@ -59,7 +59,9 @@ class Probed(Generic[T]):
             },
             indent=2,
         )
+        print("asking model...")
         should_be_interrupted = self._runtime.should_be_interrupted(self._entry, data)
+        print(f"should be interrupted? {should_be_interrupted}")
         if should_be_interrupted:
             return self._runtime.respond_event(self._entry, data)
         else:
