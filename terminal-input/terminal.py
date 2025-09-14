@@ -174,7 +174,13 @@ class Terminal(App):
             # Call MCP server
             result = await self.call_mcp_edit_project(request)
             
-            # Show result
+            # Handle special "No changes needed" case silently
+            if result == "NO_CHANGES_NEEDED":
+                # Just continue silently - user query already saved to user_query.md
+                debug_print("DEBUG: No changes needed, continuing silently")
+                return
+            
+            # Show result for all other cases
             self.update_chat(result, "ai")
             
         except Exception as e:
@@ -363,7 +369,7 @@ class Terminal(App):
             # Check for "no changes needed" response
             if "No changes needed" in ai_response:
                 debug_print("DEBUG: No changes needed detected")
-                return "✅ No changes needed based on your request."
+                return "NO_CHANGES_NEEDED"  # Special return value to handle silently
             
             # Extract file sections
             sections = self.parse_file_sections(ai_response)
