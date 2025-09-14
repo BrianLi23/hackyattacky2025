@@ -3,9 +3,10 @@ FEW_SHOT_EXAMPLES = """FEW-SHOT EXAMPLES:
 THE ORIGINAL AND MODIFIED FILES ARE EXACTLY THE SAME EXCEPT FOR THE PROBE() CALLS AND ADDED IMPORTS MAKE SURE THAT THE ORIGINAL FILE AND MODIFIED FILE ARE THE SAME OTHERWISE
 
 Example 1 - Variable State Tracking:
-User request: 'Trace the shopping cart object to detect data changes'
+User request: 'Report the shopping cart object to detect data changes'
 
 Original file (shopping_cart.py):
+load_dotenv()
 class ShoppingCart:
     def __init__(self):
         self.items = []
@@ -20,6 +21,7 @@ if __name__ == "__main__":
     cart.add_item("Apple", 1.0)
     
 Modified file (shopping_cart.py):
+load_dotenv()
 from python_runtime.probe import probe
 from ai_runtime.runtime import AIRuntime
 runtime = AIRuntime()
