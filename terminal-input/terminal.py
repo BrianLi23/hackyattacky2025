@@ -4,7 +4,8 @@ import re
 import sys
 from pathlib import Path
 
-import cohere
+import google.genai as genai
+from google.genai import types
 import difflib
 from dotenv import load_dotenv
 from rich.syntax import Syntax
@@ -188,20 +189,25 @@ class Terminal(App):
     async def simulate_mcp_project_call(self, request: str, context: str) -> str:
         """Simulate MCP call for project-wide operations"""
         try:
-            # Import here to avoid import errors if cohere not available
-            import cohere
+            # Import here to avoid import errors if google.genai not available
+            try:
+                import google.genai as genai
+                from google.genai import types
+            except ImportError as e:
+                return f"❌ Google GenAI not available. Please install with: pip install google-genai\nError: {e}"
+                
             import difflib
             import os
             from dotenv import load_dotenv
             
             load_dotenv()
             
-            # Setup Cohere
-            api_key = os.getenv("CO_API_KEY") or os.getenv("COHERE_API_KEY")
+            # Setup Gemini
+            api_key = os.getenv("GEMINI_API_KEY")
             if not api_key:
-                return "❌ No API key found. Set CO_API_KEY or COHERE_API_KEY environment variable."
+                return "❌ No API key found. Set GEMINI_API_KEY environment variable."
             
-            co = cohere.ClientV2(api_key)
+            client = genai.Client(api_key=api_key)
             
             # Read project description
             with open(self.current_file, 'r') as f:
@@ -221,13 +227,16 @@ class Terminal(App):
             debug_print(prompt[-500:])
             debug_print("=" * 50)
             
-            # Call AI
-            response = co.chat(
-                model="command-a-03-2025",
-                messages=[{"role": "user", "content": prompt}]
+            # Call AI - Create chat session and send message
+            chat_session = client.chats.create(
+                model='gemini-2.0-flash-exp',
+                config=types.GenerateContentConfig(
+                    system_instruction="You are an expert AI software engineer helping with code analysis and probing instrumentation."
+                )
             )
             
-            ai_response = response.message.content[0].text
+            response = chat_session.send_message(prompt)
+            ai_response = response.text
             
             debug_print("=" * 50)
             debug_print("AI RESPONSE RECEIVED:")
