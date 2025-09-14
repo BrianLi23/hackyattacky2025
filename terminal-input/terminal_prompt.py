@@ -48,7 +48,7 @@ class ShoppingCart:
     def add_item(self, item, price):
         self.items.append(item)
         self._total += price
-        self.total = self._total, "updating total", self.runtime
+        self.total = probe(self._total, "updating total", self.runtime)
 
 Example 3 - Function Call Monitoring:
 User request: 'Monitor all API calls to track request/response data'
@@ -79,7 +79,30 @@ def update_user(user_id, data):
     response = request.post(f'/api/users/{user_id}', json=data)
     return response.status_code
 
-Example 4 - DO NOT DO THIS
+Example 4 - List Operations Tracking:
+User request: 'Probe the list to track when items are added or removed'
+
+Original file (task_manager.py):
+def main():
+    my_list = []
+    my_list.append(4)
+    my_list.append(5)
+    my_list.append(6)
+    print(my_list)
+
+Modified file (task_manager.py):
+from probe import probe, Runtime
+
+def main():
+    runtime = Runtime()
+    my_list = []
+    my_list = probe(my_list, "tracking list operations", runtime)
+    my_list.append(4)
+    my_list.append(5)
+    my_list.append(6)
+    print(my_list)
+
+Example 5 - DO NOT DO THIS
 ```python
 Modified file (data_processor.py):
 from probe import probe, Runtime
@@ -139,8 +162,10 @@ RULES FOR PROBING
 1. Always create a new Runtime instance for each probing session.
 2. Probe variables, function calls, and data structures as needed.
 3. DO NOT ADD ```python``` AROUND THE ORIGINAL FILE AND MODIFIED FILE IN YOUR OUTPUT
-4. Don't make a new variable when probing, just probe directly on the existing variable
-5. DO NOT WRITE YOUR EXPLANATION, JUST SHOW THE MODFIED FILE CHANGE
+4. When probing lists, dictionaries, or objects, wrap them with probe() after creation
+5. For tracking variable changes, probe the variable after assignment
+6. Always respond with file modifications when probing is requested
+7. DO NOT WRITE YOUR EXPLANATION, JUST SHOW THE MODFIED FILE CHANGE
 
 {FEW_SHOT_EXAMPLES}
 
