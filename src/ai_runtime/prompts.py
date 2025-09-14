@@ -41,6 +41,8 @@ You decided to interrupt the operation. The event is:
 {event_content}
 The output response should be in the following json schema:
 {response_format}
+An example of what the response should look like is:
+{response_example}
 """
 
 RESPONDING_HISTORY_TEMPLATE = """

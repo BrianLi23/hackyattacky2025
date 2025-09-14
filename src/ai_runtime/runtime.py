@@ -51,15 +51,33 @@ class AIRuntime(Runtime):
         )
         self.probed_objects[probed] = history
 
-    def respond_event(self, probed: "Probed", event_content: str) -> str:
+    def respond_event(
+        self,
+        probed: "Probed",
+        event_content: str,
+        result_schema: str,
+        result_example: str,
+    ) -> str:
         history = self.probed_objects[probed]
-        result_json_schema = self._obj.__doc__
+        print("the schema is :", result_schema)
         prompt = RESPOND_EVENT.format(
             history=history,
             event_content=event_content,
-            response_format=f"result: {result_json_schema}",
+            response_format=result_schema,
+            response_example="No example provided",
         )
-        output = json.loads(martian.use_martian(prompt, "", ""))["result"]
+        model_output = martian.use_martian(prompt, "", "")
+        print(
+            "--------------------------------------------------------------------------"
+        )
+        print("--------------model output-----------")
+        print(model_output)
+        print("--------------end model output-----------")
+        output = json.loads(model_output)
+        print("parsed output:", output)
+        print(
+            "--------------------------------------------------------------------------"
+        )
         history += "\n" + RESPONDING_HISTORY_TEMPLATE.format(
             response=output,
         )

@@ -25,7 +25,13 @@ class Runtime:
     def should_be_interrupted(self, probed: "Probed", event_content: str) -> bool:
         pass
 
-    def respond_event(self, probed: "Probed", event_content: str) -> str:
+    def respond_event(
+        self,
+        probed: "Probed",
+        event_content: str,
+        result_schema: str,
+        result_example: str,
+    ) -> str:
         pass
 
 
@@ -63,7 +69,16 @@ class Probed(Generic[T]):
         should_be_interrupted = self._runtime.should_be_interrupted(self._entry, data)
         print(f"should be interrupted? {should_be_interrupted}")
         if should_be_interrupted:
-            return self._runtime.respond_event(self._entry, data)
+            result_schema = self._obj.__doc__
+            print("the schema is :", result_schema)
+            result_example = None
+            try:
+                result_example = self._obj(*args, **kwargs)
+            except Exception as e:
+                pass
+            return self._runtime.respond_event(
+                self._entry, data, result_schema, result_example
+            )
         else:
             result = self._obj(*args, **kwargs)
             self._runtime.listen_event(self._entry, data, result)
