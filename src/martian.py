@@ -2,6 +2,7 @@ import openai
 import os
 import json
 import uuid
+import tempfile
 from datetime import datetime
 from dotenv import load_dotenv
 from google import genai
@@ -39,12 +40,15 @@ def image_generator_tool(image_description: str) -> str:
     print("I am here!")
     for part in response.candidates[0].content.parts:
         if part.inline_data is not None:
-            # Generate unique filename
+            # Generate unique filename in temp directory within current directory
+            temp_dir = os.path.join(os.getcwd(), "temp")
+            os.makedirs(temp_dir, exist_ok=True)
             filename = f"generated_image_{uuid.uuid4().hex[:8]}.png"
+            filepath = os.path.join(temp_dir, filename)
             image = Image.open(BytesIO(part.inline_data.data))
-            image.save(filename)
-            print("I am returning the filename:", filename)
-            return os.path.abspath(filename)
+            image.save(filepath)
+            print("I am returning the filename:", filepath)
+            return os.path.abspath(filepath)
 
     return "No image generated"
 
@@ -87,8 +91,59 @@ def use_martian(message, instructions, context):
     response = oai_client.chat.completions.create(
         model="gemini-2.5-flash",
         messages=messages,
-        response_format={"type": "json_object"},
-        # tools=tools,
-        # tool_choice="auto",
+        tools=tools,
+        tool_choice="auto",
     )
-    return response.choices[0].message.content
+    
+    # Handle tool calls
+    message = response.choices[0].message
+    if message.tool_calls:
+        generated_image_paths = []
+        
+        # Execute each tool call
+        for tool_call in message.tool_calls:
+            if tool_call.function.name == "image_generator_tool":
+                # Parse arguments and call the function
+                args = json.loads(tool_call.function.arguments)
+                image_path = image_generator_tool(args["image_description"])
+                generated_image_paths.append(image_path)
+        
+        # If images were generated, make a second call to integrate paths
+        if generated_image_paths:
+            # Add the assistant's tool call message to conversation
+            messages.append({
+                "role": "assistant", 
+                "content": None,
+                "tool_calls": [
+                    {
+                        "id": tc.id,
+                        "type": "function", 
+                        "function": {"name": tc.function.name, "arguments": tc.function.arguments}
+                    } for tc in message.tool_calls
+                ]
+            })
+            
+            # Add tool results to conversation
+            for i, tool_call in enumerate(message.tool_calls):
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": tool_call.id,
+                    "content": generated_image_paths[i]
+                })
+            
+            # Add instruction to incorporate image paths
+            messages.append({
+                "role": "user",
+                "content": f"I have generated {len(generated_image_paths)} images with the following file paths: {generated_image_paths}. Please provide your response incorporating these image file paths in the appropriate locations."
+            })
+            
+            # Make second API call without tools to get final response
+            final_response = oai_client.chat.completions.create(
+                model="gemini-2.5-flash",
+                messages=messages,
+                response_format={"type": "json_object"},
+            )
+            return final_response.choices[0].message.content
+    
+    # If no tool calls, return the regular response
+    return message.content
