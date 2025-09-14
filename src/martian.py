@@ -20,7 +20,7 @@ if not GEMINI_API_KEY:
     )
 
 oai_client = openai.OpenAI(
-    api_key=MARTIAN_ENV, base_url="https://api.withmartian.com/v1"
+    api_key=GEMINI_API_KEY, base_url="https://generativelanguage.googleapis.com/v1beta/openai/"
 )
 
 # Initialize Google Genai client for image generation
@@ -85,10 +85,10 @@ def use_martian(message, instructions, context):
     ]
 
     response = oai_client.chat.completions.create(
-        model="google/gemini-2.5-flash",
+        model="gemini-2.5-flash",
         messages=messages,
         response_format={"type": "json_object"},
-        tools=tools,
-        tool_choice="auto",
+        # tools=tools,
+        # tool_choice="auto",
     )
     return response.choices[0].message.content
