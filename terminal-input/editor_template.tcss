@@ -1,0 +1,59 @@
+/* Minimal Editor CSS */
+
+Screen {
+    background: #1a1a1a;
+}
+
+.main {
+    margin: 1;
+    padding: 1;
+}
+
+Input {
+    dock: bottom;
+    height: 3;
+    background: #333;
+    color: white;
+}
+
+Select {
+    height: 3;
+    background: #333;
+    color: white;
+    margin: 0 0 1 0;
+}
+
+/* Chat bubbles */
+.user-bubble {
+    background: #2d4a87;
+    color: white;
+    margin: 1 0;
+    padding: 1;
+}
+
+.ai-bubble {
+    background: #2d5a27;
+    color: white;
+    margin: 1 0;
+    padding: 1;
+}
+
+.thinking-bubble {
+    background: #8b7355;
+    color: white;
+    margin: 1 0;
+    padding: 1;
+}
+
+.error-bubble {
+    background: #8b2635;
+    color: white;
+    margin: 1 0;
+    padding: 1;
+}
+
+Footer {
+    dock: bottom;
+    height: 1;
+    background: #333;
+}
