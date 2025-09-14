@@ -2,6 +2,7 @@ import logging
 import os
 import re
 import sys
+import argparse
 from pathlib import Path
 
 import google.genai as genai
@@ -37,28 +38,31 @@ def debug_print(*args, **kwargs):
 class Terminal(App):
     CSS_PATH = "editor_template.tcss"
     
-    def __init__(self):
+    def __init__(self, working_dir: str = "."):
         super().__init__()
+        self.working_dir = Path(working_dir).resolve()
         self.current_file = ""
         self.files = self.scan_files()
         self.pending_changes = None
         
         # Add key bindings
-        self.title = "MCP Minimal Editor (Press Ctrl+C or q to quit)"
+        self.title = f"MCP Minimal Editor - {self.working_dir} (Press Ctrl+C or q to quit)"
     
     def scan_files(self):
-        """Find all files recursively in current directory"""
+        """Find all files recursively in working directory"""
         files = []
         try:
-            # Recursively find all files
-            for file_path in Path(".").rglob("*"):
+            # Recursively find all files in the working directory
+            for file_path in self.working_dir.rglob("*"):
                 if file_path.is_file():
                     # Skip hidden files, binary files, and common ignore patterns
                     if (not file_path.name.startswith('.') and 
                         file_path.suffix not in ['.pyc', '.exe', '.bin', '.so', '.dll'] and
                         '__pycache__' not in str(file_path) and
                         '.git' not in str(file_path)):
-                        files.append((str(file_path), str(file_path)))
+                        # Make path relative to working directory for display
+                        rel_path = file_path.relative_to(self.working_dir)
+                        files.append((str(rel_path), str(file_path)))
         except Exception as e:
             # Debug: show error if any
             files.append((f"Error scanning: {e}", ""))
@@ -66,7 +70,7 @@ class Terminal(App):
         
         # Debug: show count
         if files:
-            files.insert(0, (f"Found {len(files)} files", ""))
+            files.insert(0, (f"Found {len(files)} files in {self.working_dir}", ""))
         else:
             files.append(("No files found", ""))
             
@@ -215,9 +219,10 @@ class Terminal(App):
             
             # Save user request to user_query.md file
             try:
-                with open("user_query.md", "w") as f:
+                user_query_path = self.working_dir / "user_query.md"
+                with open(user_query_path, "w") as f:
                     f.write(f"{request}")
-                debug_print(f"DEBUG: Saved user query to user_query.md: {request}")
+                debug_print(f"DEBUG: Saved user query to {user_query_path}: {request}")
             except Exception as e:
                 debug_print(f"DEBUG: Error saving to user_query.md: {e}")
             
@@ -471,10 +476,10 @@ class Terminal(App):
     def get_all_project_files(self) -> list:
         """Get list of all project files"""
         all_files = []
-        debug_print("DEBUG: Scanning project files...")
+        debug_print(f"DEBUG: Scanning project files in {self.working_dir}...")
         
         try:
-            for file_path in Path(".").rglob("*"):
+            for file_path in self.working_dir.rglob("*"):
                 if file_path.is_file():
                     # Skip hidden files, binary files, and common ignore patterns
                     if (not file_path.name.startswith('.') and 
@@ -482,7 +487,9 @@ class Terminal(App):
                         '__pycache__' not in str(file_path) and
                         '.git' not in str(file_path) and
                         'terminal_debug.log' not in str(file_path)):
-                        all_files.append(str(file_path))
+                        # Make path relative to working directory
+                        rel_path = file_path.relative_to(self.working_dir)
+                        all_files.append(str(rel_path))
                         
             debug_print(f"DEBUG: Found {len(all_files)} project files")
             for i, f in enumerate(all_files[:10]):  # Log first 10 files
@@ -506,7 +513,9 @@ class Terminal(App):
             
             for i, file_path in enumerate(all_files):
                 try:
-                    with open(file_path, 'r', encoding='utf-8') as f:
+                    # Convert relative path to absolute for file operations
+                    absolute_path = self.working_dir / file_path
+                    with open(absolute_path, 'r', encoding='utf-8') as f:
                         content = f.read()
                     
                     # Only limit very large files
@@ -561,34 +570,41 @@ class Terminal(App):
                     original_content = change['original_content']
                     action = change['action']
                     
+                    # Convert relative path to absolute path based on working directory
+                    if not Path(file_path).is_absolute():
+                        absolute_file_path = self.working_dir / file_path
+                    else:
+                        absolute_file_path = Path(file_path)
+                    
                     debug_print(f"DEBUG: Change {i}: {action} {file_path}")
+                    debug_print(f"DEBUG: Absolute path: {absolute_file_path}")
                     debug_print(f"DEBUG: New content length: {len(new_content)} chars")
                     debug_print(f"DEBUG: New content preview: {new_content[:100]}...")
                     
                     if action == 'create':
                         # Create new file
-                        Path(file_path).parent.mkdir(parents=True, exist_ok=True)
-                        with open(file_path, 'w') as f:
+                        absolute_file_path.parent.mkdir(parents=True, exist_ok=True)
+                        with open(absolute_file_path, 'w') as f:
                             f.write(new_content)
                         
                         lines_count = len(new_content.split('\n'))
                         applied_files.append(f"✅ CREATED: {file_path} ({lines_count} lines)")
-                        debug_print(f"DEBUG: Created {file_path} with {lines_count} lines")
+                        debug_print(f"DEBUG: Created {absolute_file_path} with {lines_count} lines")
                         
                     elif action == 'modify':
                         # Create backup for existing file
-                        backup_path = f"{file_path}.backup"
+                        backup_path = absolute_file_path.with_suffix(absolute_file_path.suffix + '.backup')
                         with open(backup_path, 'w') as f:
                             f.write(original_content)
                         
                         # Write new content
-                        with open(file_path, 'w') as f:
+                        with open(absolute_file_path, 'w') as f:
                             f.write(new_content)
                         
                         old_lines = len(original_content.split('\n'))
                         new_lines = len(new_content.split('\n'))
-                        applied_files.append(f"✅ MODIFIED: {file_path} ({old_lines} → {new_lines} lines, backup: {backup_path})")
-                        debug_print(f"DEBUG: Modified {file_path}: {old_lines} → {new_lines} lines")
+                        applied_files.append(f"✅ MODIFIED: {file_path} ({old_lines} → {new_lines} lines, backup: {backup_path.name})")
+                        debug_print(f"DEBUG: Modified {absolute_file_path}: {old_lines} → {new_lines} lines")
                 
                 # Show result
                 result = f"🎉 Successfully applied {len(applied_files)} changes:\n\n" + "\n".join(applied_files)
@@ -601,17 +617,23 @@ class Terminal(App):
                 new_content = self.pending_changes['new_content']
                 original_content = self.pending_changes['original_content']
                 
+                # Convert relative path to absolute path based on working directory
+                if not Path(file_path).is_absolute():
+                    absolute_file_path = self.working_dir / file_path
+                else:
+                    absolute_file_path = Path(file_path)
+                
                 # Create backup
-                backup_path = f"{file_path}.backup"
+                backup_path = absolute_file_path.with_suffix(absolute_file_path.suffix + '.backup')
                 with open(backup_path, 'w') as f:
                     f.write(original_content)
                 
                 # Write new content
-                with open(file_path, 'w') as f:
+                with open(absolute_file_path, 'w') as f:
                     f.write(new_content)
                 
                 # Show result
-                self.update_chat(f"✅ Changes applied! Backup: {backup_path}", "ai")
+                self.update_chat(f"✅ Changes applied! Backup: {backup_path.name}", "ai")
             
             # Clear pending changes
             self.pending_changes = None
@@ -649,7 +671,24 @@ class Terminal(App):
 
 
 def main():
-    app = Terminal()
+    parser = argparse.ArgumentParser(description='MCP Terminal - AI-powered code editor')
+    parser.add_argument('--path', '-p', 
+                        default='.',
+                        help='Path to the directory to index and work with (default: current directory)')
+    
+    args = parser.parse_args()
+    
+    # Verify the path exists
+    working_path = Path(args.path)
+    if not working_path.exists():
+        print(f"Error: Path '{args.path}' does not exist", file=sys.stderr)
+        sys.exit(1)
+    
+    if not working_path.is_dir():
+        print(f"Error: Path '{args.path}' is not a directory", file=sys.stderr)
+        sys.exit(1)
+    
+    app = Terminal(working_dir=str(working_path))
     app.run()
 
 
