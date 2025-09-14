@@ -1,4 +1,4 @@
-# Poker Project
+# Marionette Project
 
 A Python project that uses the OpenAI API through Martian's router to interact with Cohere models.
 
@@ -7,53 +7,24 @@ A Python project that uses the OpenAI API through Martian's router to interact w
 - Python 3.7 or higher
 - pip (Python package installer)
 
-## Setup
+## Run the Program
 
-### Virtual Environment
-
-Create a virtual environment:
-```bash 
-python -m venv .venv
-```
-
-macOS/Linux:
+Run your project, e.g.
 ```bash
-source .venv/bin/activate
+npm run dev
 ```
 
-Windows:
+Clone the **Marionette** and install the library in your project:
 ```bash
-.venv\Scripts\activate
+uv pip install -e ../../htn-25/
 ```
 
-Dependencies:
+Run the AI Runtime:
 ```bash
-pip install openai
+uv run app.py
 ```
 
-Activate:
+Run the Marionette terminal:
 ```bash
-source .venv/bin/activate
+uv run python3 terminal.py -p ~/your-local-path/backend
 ```
-
-
-### Configuration
-
-```python
-api_key = "your-api-key-here"
-```
-
-### Running the Project
-
-```bash
-python test.py
-```
-
-## Available Models
-
-- command-a-03-2025
-- command-r-08-2024
-- command-r7b
-- command-a-translate
-- command-a-reasoning
-- command-a-vision
