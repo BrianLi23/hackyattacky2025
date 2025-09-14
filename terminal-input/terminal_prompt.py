@@ -11,9 +11,10 @@ def execute_query(connection, query, params):
 
 
 Modified file (database.py):
-from probe import probe, Runtime
+from python_runtime.probe import probe
+from ai_runtime.runtime import AIRuntime
 
-runtime = Runtime()
+runtime = AIRuntime()
 
 def execute_query(connection, query, params):
     cursor = connection.cursor()
@@ -36,11 +37,12 @@ class ShoppingCart:
         self.total += price
 
 Modified file (shopping_cart.py):
-from probe import probe, Runtime
+from python_runtime.probe import probe
+from ai_runtime.runtime import AIRuntime
 
 class ShoppingCart:
     def __init__(self):
-        self.runtime = Runtime()
+        self.runtime = AIRuntime()
         self.items = []
         self._total = 0
         self.total = probe(self._total, "tracking cart total", self.runtime)
@@ -300,8 +302,9 @@ def get_messages():
         return jsonify({'error': 'Database error'}), 500
         
 Modified file (product_service.py):
-from probe import probe, Runtime
-runtime = Runtime()
+from python_runtime.probe import probe
+from ai_runtime.runtime import AIRuntime
+runtime = AIRuntime()
 class ProductManager:
     def __init__(self, database_path: str = 'data/products.db'):
         Initialize ProductManager with database path
@@ -366,9 +369,10 @@ def update_user(user_id, data):
 
 Modified file (api_client.py):
 import requests
-from probe import probe, Runtime
+from python_runtime.probe import probe
+from ai_runtime.runtime import AIRuntime
 
-runtime = Runtime()
+runtime = AIRuntime()
 request = probe(requests, "tracking API requests", runtime)
 
 def fetch_user_data(user_id):
@@ -391,10 +395,11 @@ def main():
     print(my_list)
 
 Modified file (task_manager.py):
-from probe import probe, Runtime
+from python_runtime.probe import probe
+from ai_runtime.runtime import AIRuntime
 
 def main():
-    runtime = Runtime()
+    runtime = AIRuntime()
     my_list = []
     my_list = probe(my_list, "tracking list operations", runtime)
     my_list.append(4)
@@ -405,9 +410,10 @@ def main():
 Example 6 - DO NOT DO THIS
 ```python
 Modified file (data_processor.py):
-from probe import probe, Runtime
+from python_runtime.probe import probe
+from ai_runtime.runtime import AIRuntime
 
-runtime = Runtime()
+runtime = AIRuntime()
 
 def process_data(raw_data):
     raw_data = probe(raw_data, "tracking raw input data", runtime)
@@ -432,10 +438,11 @@ Your job is to:
 - When appropriate, add probing instrumentation to track variables, function calls, and data flow
 
 PROBING API DOCUMENTATION:
-from probe import probe, Runtime, Probed
+from python_runtime.probe import probe
+from ai_runtime.runtime import AIRuntime
 
 # Create a runtime to handle probe events
-runtime = Runtime()
+runtime = AIRuntime()
 
 # Probe a variable or object
 my_variable = probe(my_variable, 'tracking my_variable', runtime)
@@ -460,7 +467,7 @@ result = my_function(1, 2)  # Call and result will be logged
 
 RULES FOR PROBING
 1. If the user says to mock a database, this means that you need to mock the object of the class that is calling the database.
-2. Always create a new Runtime instance for each probing session.
+2. Always create a new AIRuntime instance for each probing session.
 3. Probe variables, function calls, and data structures as needed.
 4. DO NOT ADD ```python``` AROUND THE ORIGINAL FILE AND MODIFIED FILE IN YOUR OUTPUT
 5. When probing lists, dictionaries, or objects, wrap them with probe() after creation

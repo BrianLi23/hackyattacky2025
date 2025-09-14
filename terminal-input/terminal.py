@@ -213,6 +213,14 @@ class Terminal(App):
             with open(self.current_file, 'r') as f:
                 project_description = f.read()
             
+            # Save user request to user_query.md file
+            try:
+                with open("user_query.md", "w") as f:
+                    f.write(f"{request}")
+                debug_print(f"DEBUG: Saved user query to user_query.md: {request}")
+            except Exception as e:
+                debug_print(f"DEBUG: Error saving to user_query.md: {e}")
+            
             # Build prompt for project-wide operations
             prompt = TERMINAL_PROMPT + "\n\n"
             prompt += f"<project_description>\n{project_description}\n</project_description>\n\n"
