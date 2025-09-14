@@ -3,6 +3,7 @@ import os
 import re
 import sys
 import argparse
+import importlib
 from pathlib import Path
 
 import google.genai as genai
@@ -17,7 +18,7 @@ from textual.app import App, ComposeResult
 from textual.containers import Vertical
 from textual.widgets import Footer, Header, Input, Log, Select, Static
 
-from terminal_prompt import TERMINAL_PROMPT
+import terminal_prompt
 
 # Setup debug logging to file
 import logging
@@ -227,7 +228,9 @@ class Terminal(App):
                 debug_print(f"DEBUG: Error saving to user_query.md: {e}")
             
             # Build prompt for project-wide operations
-            prompt = TERMINAL_PROMPT + "\n\n"
+            # Reload terminal_prompt module to get latest changes
+            importlib.reload(terminal_prompt)
+            prompt = terminal_prompt.TERMINAL_PROMPT + "\n\n"
             prompt += f"<project_description>\n{project_description}\n</project_description>\n\n"
             prompt += f"<project_files>\n{context}\n</project_files>\n\n"
             prompt += f"<user_request>\n{request}\n</user_request>"
@@ -242,7 +245,7 @@ class Terminal(App):
             
             # Call AI - Create chat session and send message
             chat_session = client.chats.create(
-                model='gemini-2.0-flash-exp',
+                model='gemini-2.5-flash',  # Use appropriate model
                 config=types.GenerateContentConfig(
                     system_instruction="You are an expert AI software engineer helping with code analysis and probing instrumentation."
                 )
@@ -322,10 +325,16 @@ class Terminal(App):
                     'reason': 'New content is empty'
                 }
             
+            # Convert relative path to absolute path based on working directory
+            if not Path(file_path).is_absolute():
+                absolute_file_path = self.working_dir / file_path
+            else:
+                absolute_file_path = Path(file_path)
+            
             # Check if parent directory exists for new files
-            if not os.path.exists(file_path):
-                parent_dir = os.path.dirname(file_path)
-                if parent_dir and not os.path.exists(parent_dir):
+            if not absolute_file_path.exists():
+                parent_dir = absolute_file_path.parent
+                if parent_dir and not parent_dir.exists():
                     return {
                         'valid': False,
                         'reason': f'Parent directory does not exist: {parent_dir}'
@@ -520,10 +529,10 @@ class Terminal(App):
                     
                     # Only limit very large files
                     original_length = len(content)
-                    if len(content) > 5000:
-                        content = content[:5000] + f"\n... (file truncated, total length: {original_length} chars)"
-                        debug_print(f"DEBUG: Truncated {file_path} from {original_length} to 5000 chars")
-                    
+                    if len(content) > 150000: 
+                        content = content[:150000] + f"\n... (file truncated, total length: {original_length} chars)"
+                        debug_print(f"DEBUG: Truncated {file_path} from {original_length} to 150000 chars")
+
                     context_parts.append(f"=== {file_path} ===\n{content}\n")
                     
                     if i % 10 == 0:  # Log progress every 10 files
