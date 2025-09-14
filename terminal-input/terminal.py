@@ -56,6 +56,10 @@ class Terminal(App):
             # Recursively find all files in the working directory
             for file_path in self.working_dir.rglob("*"):
                 if file_path.is_file():
+                    # Ignore any file in a folder starting with a dot
+                    parts = file_path.relative_to(self.working_dir).parts
+                    if any(part.startswith('.') for part in parts[:-1]):
+                        continue
                     # Skip hidden files, binary files, and common ignore patterns
                     if (not file_path.name.startswith('.') and 
                         file_path.suffix not in ['.pyc', '.exe', '.bin', '.so', '.dll'] and
@@ -494,13 +498,17 @@ class Terminal(App):
         debug_print(f"DEBUG: Scanning project files in {self.working_dir}...")
         
         try:
+
             for file_path in self.working_dir.rglob("*"):
                 if file_path.is_file():
                     # Skip hidden files, binary files, and common ignore patterns
+                    # Ignore any file in a folder starting with a dot
+                    parts = file_path.relative_to(self.working_dir).parts
+                    if any(part.startswith('.') for part in parts[:-1]):
+                        continue
                     if (not file_path.name.startswith('.') and 
                         file_path.suffix not in ['.pyc', '.exe', '.bin', '.so', '.dll', '.backup'] and
                         '__pycache__' not in str(file_path) and
-                        '.git' not in str(file_path) and
                         'terminal_debug.log' not in str(file_path)):
                         # Make path relative to working directory
                         rel_path = file_path.relative_to(self.working_dir)
