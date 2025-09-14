@@ -1,9 +1,16 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project]
-name = "hackyattacky2025"
+name = "puppeteer"
 version = "0.1.0"
-description = "Add your description here"
+description = "An AI runtime for Python"
 readme = "README.md"
 requires-python = ">=3.13"
+authors = [
+  { name="puppeteer team", email="your@email.com" },
+]
 dependencies = [
     "cohere>=5.18.0",
     "dotenv>=0.9.9",
@@ -17,7 +24,13 @@ dependencies = [
     "textual>=6.1.0",
 ]
 
-[dependency-groups]
+[project.urls]
+"Homepage" = "https://github.com/BrianLi23/hackyattacky2025"
+
+[project.optional-dependencies]
 dev = [
     "ruff>=0.13.0",
 ]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ai_runtime", "src/python_runtime"]
