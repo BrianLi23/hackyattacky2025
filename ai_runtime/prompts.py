@@ -39,9 +39,8 @@ What happened so far with this object:
 
 You decided to interrupt the operation. The event is:
 {event_content}
-The output response should be in the format:
+The output response should be in the following json schema:
 {response_format}
-Please provide the response.
 """
 
 RESPONDING_HISTORY_TEMPLATE = """

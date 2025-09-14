@@ -1,3 +1,4 @@
+import json
 from python_runtime.probe import Probed, Runtime
 from ai_runtime.prompts import (
     DECISION_HISTORY_TEMPLATE,
@@ -52,12 +53,13 @@ class AIRuntime(Runtime):
 
     def respond_event(self, probed: "Probed", event_content: str) -> str:
         history = self.probed_objects[probed]
+        result_json_schema = self._obj.__doc__
         prompt = RESPOND_EVENT.format(
             history=history,
             event_content=event_content,
-            response_format="str",
+            response_format=f"result: {result_json_schema}",
         )
-        output = martian.use_martian(prompt, "", "")
+        output = json.loads(martian.use_martian(prompt, "", ""))["result"]
         history += "\n" + RESPONDING_HISTORY_TEMPLATE.format(
             response=output,
         )
