@@ -37,6 +37,38 @@ def debug_print(*args, **kwargs):
     print(message, file=sys.stderr, **kwargs)
 
 class Terminal(App):
+    async def on_mount(self) -> None:
+        """Start background task to watch .md file for output."""
+        self.md_file_path = self.working_dir / "report.md"
+        self.last_line = None
+        self.set_interval(1.0, self.watch_md_file)
+
+    async def watch_md_file(self) -> None:
+        """Read the last line from the .md file and print it to the TUI if changed."""
+        try:
+            if self.md_file_path.exists():
+                with open(self.md_file_path, "r", encoding="utf-8") as f:
+                    lines = f.read().splitlines()
+                if lines:
+                    latest_line = lines[-1].strip()
+                    if latest_line and latest_line != self.last_line:
+                        self.last_line = latest_line
+                        self.print_md_output(latest_line)
+        except Exception as e:
+            self.print_md_output(f"Error reading {self.md_file_path.name}: {e}")
+
+    def print_md_output(self, line: str) -> None:
+        """Print the latest line from the .md file to the TUI, styled nicely."""
+        chat = self.query_one("#chat", Static)
+        current = chat.renderable if hasattr(chat, 'renderable') and chat.renderable else Text()
+        if not isinstance(current, Text):
+            current = Text()
+        current.append("\n")
+        current.append(f"📄 Object Tracing: ", style="bold magenta")
+        current.append(line, style="bold white on black")
+        chat.update(current)
+        chat.scroll_end()
+        
     CSS_PATH = "editor_template.tcss"
     
     def __init__(self, working_dir: str = "."):

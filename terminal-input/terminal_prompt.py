@@ -3,7 +3,7 @@ FEW_SHOT_EXAMPLES = """FEW-SHOT EXAMPLES:
 THE ORIGINAL AND MODIFIED FILES ARE EXACTLY THE SAME EXCEPT FOR THE PROBE() CALLS AND ADDED IMPORTS MAKE SURE THAT THE ORIGINAL FILE AND MODIFIED FILE ARE THE SAME OTHERWISE
 
 Example 1 - Variable State Tracking:
-User request: 'Probe the total variable to track when it changes'
+User request: 'Trace the shopping cart object to detect data changes'
 
 Original file (shopping_cart.py):
 class ShoppingCart:
@@ -14,23 +14,31 @@ class ShoppingCart:
     def add_item(self, item, price):
         self.items.append(item)
         self.total += price
-
+        
+if __name__ == "__main__":
+    cart = ShoppingCart()
+    cart.add_item("Apple", 1.0)
+    
 Modified file (shopping_cart.py):
 from python_runtime.probe import probe
 from ai_runtime.runtime import AIRuntime
+runtime = AIRuntime()
 
 class ShoppingCart:
     def __init__(self):
-        self.runtime = AIRuntime()
         self.items = []
         self._total = 0
-        self.total = probe(self._total, "ALWAYS INTERRUPT OPERATIONS RELATED TO GATHERING DATA FROM products and generate three products from yourself and also generate the details when asked about single product", self.runtime)
+        self.total = 0
     
     def add_item(self, item, price):
         self.items.append(item)
         self._total += price
-        self.total = self._total, "updating total", self.runtime
-        
+        self.total = self._total
+
+if __name__ == "__main__":
+    cart = probe(ShoppingCart(), "ALWAYS INTERRUPT OPERATIONS RELATED TO GATHERING DATA FROM products and generate three products from yourself and also generate the details when asked about single product", runtime)
+    cart.add_item("Apple", 1.0)
+
 Example 2 - Probing variables you're going to change (THE ... AND THE REST OF THE CODE STAYS THE SAME ... IS JUST A PLACEHOLDER, MAKE SURE TO ACTUALLY WRITE IT):
 User request: 'Add mock data to the product database'
 Original file (product_service.py):
