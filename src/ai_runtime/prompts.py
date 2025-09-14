@@ -22,6 +22,9 @@ SHOULD_BE_INTERRUPTED = """
 What happened so far with this object:
 {history}
 
+User additional query (if any):
+{user_additional_query}
+
 An event is happening that is a method/function call on the object. The event is:
 {event_content}
 Do you want to interrupt this operation? Answer with a simple "yes" or "no".
@@ -36,6 +39,9 @@ You decided to {decision} the operation.
 RESPOND_EVENT = """
 What happened so far with this object:
 {history}
+
+User additional query (if any):
+{user_additional_query}
 
 You decided to interrupt the operation. The event is:
 {event_content}
@@ -53,6 +59,9 @@ The response you provided was:
 LISTEN_EVENT = """
 What happened so far with this object:
 {history}
+
+User additional query (if any):
+{user_additional_query}
 
 You decided NOT to interrupt the operation. The event is:
 {event_content}

@@ -16,6 +16,13 @@ class AIRuntime(Runtime):
     def __init__(self):
         self.probed_objects: dict[Probed, str] = {}
 
+    def get_user_additional_query(self) -> str:
+        try:
+            with open("user_query.md", "r") as file:
+                return file.read()
+        except FileNotFoundError:
+            return ""
+
     def register_probing(self, probed: Probed) -> None:
         self.probed_objects[probed] = INIT.format(
             type=type(probed._obj).__name__,
@@ -25,9 +32,11 @@ class AIRuntime(Runtime):
 
     def should_be_interrupted(self, probed: "Probed", event_content: str) -> bool:
         history = self.probed_objects[probed]
+        user_additional_query = self.get_user_additional_query()
         prompt = SHOULD_BE_INTERRUPTED.format(
             history=history,
             event_content=event_content,
+            user_additional_query=user_additional_query,
         )
         output = martian.use_martian(prompt, "", "")
         result = "yes" in output.strip().lower()
@@ -40,10 +49,12 @@ class AIRuntime(Runtime):
 
     def listen_event(self, probed: "Probed", event_content: str, result: str) -> None:
         history = self.probed_objects[probed]
+        user_additional_query = self.get_user_additional_query()
         prompt = LISTEN_EVENT.format(
             history=history,
             event_content=event_content,
             result=result,
+            user_additional_query=user_additional_query,
         )
         martian.use_martian(prompt, "", "")
         history += "\n" + LISTENING_HISTORY_TEMPLATE.format(
@@ -59,12 +70,14 @@ class AIRuntime(Runtime):
         result_example: str,
     ) -> str:
         history = self.probed_objects[probed]
+        user_additional_query = self.get_user_additional_query()
         print("the schema is :", result_schema)
         prompt = RESPOND_EVENT.format(
             history=history,
             event_content=event_content,
             response_format=result_schema,
             response_example="No example provided",
+            user_additional_query=user_additional_query,
         )
         model_output = martian.use_martian(prompt, "", "")
         print(
