@@ -1,6 +1,8 @@
 import json
 import uuid
 from typing import TypeVar, Generic, Any, Optional
+import yaml
+import datetime
 
 T = TypeVar("T")
 
@@ -22,7 +24,9 @@ class Runtime:
     def listen_event(self, probed: "Probed", event_content: str, result: str) -> None:
         pass
 
-    def should_be_interrupted(self, probed: "Probed", event_content: str) -> bool:
+    def ask_model_decisions(
+        self, probed: "Probed", event_content: str
+    ) -> tuple[bool, bool, bool]:
         pass
 
     def respond_event(
@@ -66,8 +70,23 @@ class Probed(Generic[T]):
             indent=2,
         )
         print("asking model...")
-        should_be_interrupted = self._runtime.should_be_interrupted(self._entry, data)
+        should_be_interrupted, should_be_reported, should_be_stopped = (
+            self._runtime.ask_model_decisions(self._entry, data)
+        )
         print(f"should be interrupted? {should_be_interrupted}")
+        print(f"should be reported? {should_be_reported}")
+        print(f"should be stopped? {should_be_stopped}")
+        if should_be_reported:
+            report_data = {
+                "timestamp": datetime.datetime.now().isoformat(),
+                "event_data": json.loads(data),
+            }
+            with open("report.md", "a") as f:
+                f.write(yaml.dump(report_data) + "\n---\n")
+        if should_be_stopped:
+            import ipdb
+
+            ipdb.set_trace()
         if should_be_interrupted:
             result_schema = self._obj.__doc__
             print("the schema is :", result_schema)

@@ -18,7 +18,7 @@ The user asks you to:
 {user_instructions}
 """
 
-SHOULD_BE_INTERRUPTED = """
+ASK_MODEL_DECISION = """
 What happened so far with this object:
 {history}
 
@@ -27,13 +27,23 @@ User additional query (if any):
 
 An event is happening that is a method/function call on the object. The event is:
 {event_content}
-Do you want to interrupt this operation? Answer with a simple "yes" or "no".
+Do you want to interrupt this operation? 
+Do you think this operation should be reported back to the developer?
+Should we stop the program before this operation happens?
+The answer json schema is:
+{{
+    "should_interrupt": bool,
+    "should_report": bool,
+    "should_stop": bool
+}}
 """
 
 DECISION_HISTORY_TEMPLATE = """
 This event was happening:
 {event_content}
-You decided to {decision} the operation.
+You decided to {interrupted} the operation.
+Also the operation was {reported} to the developer.
+This program {stopped} before this operation happened.
 """
 
 RESPOND_EVENT = """

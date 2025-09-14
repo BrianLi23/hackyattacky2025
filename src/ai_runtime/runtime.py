@@ -5,7 +5,7 @@ from ai_runtime.prompts import (
     INIT,
     LISTENING_HISTORY_TEMPLATE,
     RESPONDING_HISTORY_TEMPLATE,
-    SHOULD_BE_INTERRUPTED,
+    ASK_MODEL_DECISION,
     RESPOND_EVENT,
     LISTEN_EVENT,
 )
@@ -30,19 +30,27 @@ class AIRuntime(Runtime):
             user_instructions=probed._prompt,
         )
 
-    def should_be_interrupted(self, probed: "Probed", event_content: str) -> bool:
+    def ask_model_decisions(
+        self, probed: "Probed", event_content: str
+    ) -> tuple[bool, bool, bool]:
         history = self.probed_objects[probed]
         user_additional_query = self.get_user_additional_query()
-        prompt = SHOULD_BE_INTERRUPTED.format(
+        prompt = ASK_MODEL_DECISION.format(
             history=history,
             event_content=event_content,
             user_additional_query=user_additional_query,
         )
-        output = martian.use_martian(prompt, "", "")
-        result = "yes" in output.strip().lower()
+        output = json.loads(martian.use_martian(prompt, "", ""))
+        result = (
+            output.get("should_interrupt", False),
+            output.get("should_report", False),
+            output.get("should_stop", False),
+        )
         history += "\n" + DECISION_HISTORY_TEMPLATE.format(
             event_content=event_content,
-            decision="interrupt" if result else "not interrupt",
+            interrupted="interrupt" if result[0] else "not interrupt",
+            reported="reported" if result[1] else "not reported",
+            stopped="stopped" if result[2] else "not stopped",
         )
         self.probed_objects[probed] = history
         return result
