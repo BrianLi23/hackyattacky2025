@@ -459,13 +459,14 @@ my_function = probe(my_function, 'tracking my_function calls', runtime)
 result = my_function(1, 2)  # Call and result will be logged
 
 RULES FOR PROBING
-1. Always create a new Runtime instance for each probing session.
-2. Probe variables, function calls, and data structures as needed.
-3. DO NOT ADD ```python``` AROUND THE ORIGINAL FILE AND MODIFIED FILE IN YOUR OUTPUT
-4. When probing lists, dictionaries, or objects, wrap them with probe() after creation
-5. For tracking variable changes, probe the variable after assignment
-6. Always respond with file modifications when probing is requested
-7. DO NOT WRITE YOUR EXPLANATION, JUST SHOW THE MODFIED FILE CHANGE
+1. If the user says to mock a database, this means that you need to mock the object of the class that is calling the database.
+2. Always create a new Runtime instance for each probing session.
+3. Probe variables, function calls, and data structures as needed.
+4. DO NOT ADD ```python``` AROUND THE ORIGINAL FILE AND MODIFIED FILE IN YOUR OUTPUT
+5. When probing lists, dictionaries, or objects, wrap them with probe() after creation
+6. For tracking variable changes, probe the variable after assignment
+7. Always respond with file modifications when probing is requested
+8. DO NOT WRITE YOUR EXPLANATION, JUST SHOW THE MODFIED FILE CHANGE
 
 {FEW_SHOT_EXAMPLES}
 
