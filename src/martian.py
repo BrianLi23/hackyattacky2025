@@ -9,7 +9,9 @@ from google import genai
 from google.genai import types
 from PIL import Image
 from io import BytesIO
+from martian_prompt import IMAGE_GENERATION
 import base64
+import re
 
 load_dotenv()
 MARTIAN_ENV = os.getenv("MARTIAN_ENV")
@@ -21,7 +23,8 @@ if not GEMINI_API_KEY:
     )
 
 oai_client = openai.OpenAI(
-    api_key=GEMINI_API_KEY, base_url="https://generativelanguage.googleapis.com/v1beta/openai/"
+    api_key=GEMINI_API_KEY,
+    base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
 )
 
 # Initialize Google Genai client for image generation
@@ -56,94 +59,25 @@ def image_generator_tool(image_description: str) -> str:
 def use_martian(message, instructions, context):
     messages = []
 
-    if instructions:
-        messages.append({"role": "system", "content": instructions})
-
     messages.append({"role": "user", "content": message})
 
-    messages.append(
-        {
-            "role": "user",
-            "content": "Context of previous prompts in this session: " + context,
-        }
-    )
-
-    tools = [
-        {
-            "type": "function",
-            "function": {
-                "name": "image_generator_tool",
-                "description": "Generates an image based on the provided description using Google Genai",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "image_description": {
-                            "type": "string",
-                            "description": "Description of the image to generate",
-                        }
-                    },
-                    "required": ["image_description"],
-                },
-            },
-        }
-    ]
+    messages.append({"role": "system", "content": IMAGE_GENERATION})
 
     response = oai_client.chat.completions.create(
         model="gemini-2.5-flash",
         messages=messages,
-        tools=tools,
-        tool_choice="auto",
+        response_format={"type": "json_object"},
     )
-    
-    # Handle tool calls
+
     message = response.choices[0].message
-    if message.tool_calls:
-        generated_image_paths = []
-        
-        # Execute each tool call
-        for tool_call in message.tool_calls:
-            if tool_call.function.name == "image_generator_tool":
-                # Parse arguments and call the function
-                args = json.loads(tool_call.function.arguments)
-                image_path = image_generator_tool(args["image_description"])
-                generated_image_paths.append(image_path)
-        
-        # If images were generated, make a second call to integrate paths
-        if generated_image_paths:
-            # Add the assistant's tool call message to conversation
-            messages.append({
-                "role": "assistant", 
-                "content": None,
-                "tool_calls": [
-                    {
-                        "id": tc.id,
-                        "type": "function", 
-                        "function": {"name": tc.function.name, "arguments": tc.function.arguments}
-                    } for tc in message.tool_calls
-                ]
-            })
-            
-            # Add tool results to conversation
-            for i, tool_call in enumerate(message.tool_calls):
-                messages.append({
-                    "role": "tool",
-                    "tool_call_id": tool_call.id,
-                    "content": generated_image_paths[i]
-                })
-            
-            # Add instruction to incorporate image paths
-            messages.append({
-                "role": "user",
-                "content": f"I have generated {len(generated_image_paths)} images with the following file paths: {generated_image_paths}. Please provide your response incorporating these image file paths in the appropriate locations."
-            })
-            
-            # Make second API call without tools to get final response
-            final_response = oai_client.chat.completions.create(
-                model="gemini-2.5-flash",
-                messages=messages,
-                response_format={"type": "json_object"},
-            )
-            return final_response.choices[0].message.content
-    
-    # If no tool calls, return the regular response
-    return message.content
+    content = message.content
+
+    image_url_pattern = r"IMAGE_URL\(([^)]+)\)"
+    matches = re.findall(image_url_pattern, content)
+
+    for description in matches:
+        clean_description = description.strip("\"'")
+        image_path = image_generator_tool(clean_description)
+        content = content.replace(f"IMAGE_URL({description})", image_path, 1)
+
+    return content

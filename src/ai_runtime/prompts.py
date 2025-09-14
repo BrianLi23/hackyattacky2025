@@ -49,6 +49,7 @@ The output response should be in the following json schema:
 {response_format}
 An example of what the response should look like is:
 {response_example}
+Your respond should be just a valid json object that conforms to the schema above and nothing else.
 """
 
 RESPONDING_HISTORY_TEMPLATE = """
