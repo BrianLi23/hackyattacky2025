@@ -1,26 +1,44 @@
-"""
-Minimal Editor with MCP Integration
-Connects to MCP server for AI file editing
-"""
-import asyncio
-import json
-import subprocess
+import logging
+import os
+import re
+import sys
 from pathlib import Path
 
+import cohere
+import difflib
+from dotenv import load_dotenv
+from rich.syntax import Syntax
+from rich.text import Text
+
+from textual import on
 from textual.app import App, ComposeResult
 from textual.containers import Vertical
-from textual.widgets import Input, Static, Footer, Select
-from textual import on
-from rich.text import Text
-from rich.syntax import Syntax
+from textual.widgets import Footer, Header, Input, Log, Select, Static
 
-class MCPMinimalEditor(App):
+from terminal_prompt import TERMINAL_PROMPT
+
+# Setup debug logging to file
+import logging
+logging.basicConfig(
+    filename='terminal_debug.log',
+    level=logging.DEBUG,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    filemode='w'  # Overwrite log file each time
+)
+debug_log = logging.getLogger(__name__)
+
+def debug_print(*args, **kwargs):
+    """Print to both stderr and log file"""
+    message = ' '.join(str(arg) for arg in args)
+    debug_log.info(message)
+    print(message, file=sys.stderr, **kwargs)
+
+class Terminal(App):
     CSS_PATH = "editor_template.tcss"
     
     def __init__(self):
         super().__init__()
         self.current_file = ""
-        self.mcp_process = None
         self.files = self.scan_files()
         self.pending_changes = None
         
@@ -60,7 +78,7 @@ class MCPMinimalEditor(App):
             if self.files:
                 yield Select(self.files, id="file_select", prompt="Select project description file (README, etc.)...")
             else:
-                yield Static("No files found", classes="error-bubble")
+                yield Static("No files found")
             
             # Chat area
             yield Static(id="chat", classes="main")
@@ -115,7 +133,7 @@ class MCPMinimalEditor(App):
             chat.update(text)
             
         except Exception as e:
-            self.add_bubble(f"Error loading project: {e}", "error")
+            self.update_chat(f"Error loading project: {e}", "error")
     
     @on(Input.Submitted, "#input")
     async def handle_input(self, event):
@@ -133,31 +151,36 @@ class MCPMinimalEditor(App):
             return
         elif request.lower() == 'cancel':
             self.pending_changes = None
-            self.add_bubble("Changes cancelled", "ai")
+            self.update_chat("Changes cancelled", "ai")
             return
         
         if not self.current_file:
-            self.add_bubble("Please select a project description file first", "error")
+            self.update_chat("Please select a project description file first", "error")
             return
         
         # Show user request
-        self.add_bubble(f"You: {request}", "user")
+        self.update_chat(f"You: {request}", "user")
         
-        # Show thinking
-        self.add_bubble("AI is thinking...", "thinking")
+        # Show loading message
+        self.update_chat("Re-indexing project files and analyzing...", "loading")
         
         try:
             # Call MCP server
             result = await self.call_mcp_edit_project(request)
-            self.add_bubble(result, "ai")
+            
+            # Show result
+            self.update_chat(result, "ai")
             
         except Exception as e:
-            self.add_bubble(f"Error: {e}", "error")
+            # Show error
+            self.update_chat(f"Error: {e}", "error")
     
     async def call_mcp_edit_project(self, request: str) -> str:
         """Call MCP server to edit project based on request"""
-        # Get all project context
+        # Re-index all files before every AI call to get latest state
+        debug_print("DEBUG: Re-indexing all project files...")
         context = await self.get_full_project_context()
+        debug_print(f"DEBUG: Indexed {len(self.get_all_project_files())} files")
         
         # Simulate MCP call (in real implementation, this would use MCP client)
         return await self.simulate_mcp_project_call(request, context)
@@ -185,32 +208,18 @@ class MCPMinimalEditor(App):
                 project_description = f.read()
             
             # Build prompt for project-wide operations
-            prompt = (
-                "You are an expert AI software engineer. The user has provided you with:\n"
-                "1. A project description file\n"
-                "2. The complete contents of all files in their project\n"
-                "3. A request for what they want you to do\n\n"
-                "Your job is to:\n"
-                "- Analyze the project and understand its structure\n" 
-                "- Determine what files need to be modified to fulfill the request\n"
-                "- Provide the complete modified content for each file that needs changes\n"
-                "- If files need to be created, specify their full path and content\n\n"
-                "Format your response as:\n"
-                "ANALYSIS: [Brief analysis of what needs to be done]\n\n"
-                "FILES TO MODIFY:\n"
-                "=== filepath1 ===\n"
-                "[complete file content]\n\n"
-                "=== filepath2 ===\n"
-                "[complete file content]\n\n"
-                "If no changes are needed, just respond with: NO_CHANGES_NEEDED\n\n"
-            )
-            
+            prompt = TERMINAL_PROMPT + "\n\n"
             prompt += f"<project_description>\n{project_description}\n</project_description>\n\n"
-            
-            if context:
-                prompt += f"<project_files>\n{context}\n</project_files>\n\n"
-            
+            prompt += f"<project_files>\n{context}\n</project_files>\n\n"
             prompt += f"<user_request>\n{request}\n</user_request>"
+            
+            debug_print("=" * 50)
+            debug_print("SENDING TO AI:")
+            debug_print("=" * 50)
+            debug_print(f"Prompt length: {len(prompt)} chars")
+            debug_print("Last 500 chars of prompt:")
+            debug_print(prompt[-500:])
+            debug_print("=" * 50)
             
             # Call AI
             response = co.chat(
@@ -220,168 +229,334 @@ class MCPMinimalEditor(App):
             
             ai_response = response.message.content[0].text
             
-            # Parse response and prepare changes
-            if "NO_CHANGES_NEEDED" in ai_response:
-                return "✅ No changes needed based on your request."
+            debug_print("=" * 50)
+            debug_print("AI RESPONSE RECEIVED:")
+            debug_print("=" * 50)
+            debug_print(f"Response length: {len(ai_response)} chars")
+            debug_print("First 300 chars:")
+            debug_print(ai_response[:300])
+            debug_print("=" * 50)
             
-            return await self.parse_and_prepare_changes(ai_response)
+            # Parse response and prepare changes using new before/after format
+            return await self.parse_before_after_response(ai_response)
                 
         except Exception as e:
             return f"Error: {e}"
     
-    async def parse_and_prepare_changes(self, ai_response: str) -> str:
-        """Parse AI response and prepare file changes"""
+    def parse_file_sections(self, ai_response: str) -> list:
+        """Extract file sections from AI response"""
+        import re
+        
+        sections = []
+        
+        debug_print("DEBUG: Starting file section parsing...")
+        debug_print(f"DEBUG: Response length: {len(ai_response)} chars")
+        
+        # Simple pattern that matches the actual format from examples
+        # Looks for "Original file (filename):" followed by content, then "Modified file (filename):" 
+        pattern = r'Original file \(([^)]+)\):\s*\n(.*?)\n\n+Modified file \([^)]+\):\s*\n(.*?)(?=\n\n+Original file|\n\n+Example|\Z)'
+        matches = re.findall(pattern, ai_response, re.DOTALL)
+        
+        debug_print(f"DEBUG: Regex found {len(matches)} matches")
+        
+        for i, match in enumerate(matches):
+            filename = match[0].strip()
+            original_content = match[1].strip()
+            modified_content = match[2].strip()
+            
+            debug_print(f"DEBUG: Match {i+1}:")
+            debug_print(f"  Raw filename: '{match[0]}'")
+            debug_print(f"  Cleaned filename: '{filename}'")
+            debug_print(f"  Original content length: {len(original_content)}")
+            debug_print(f"  Modified content length: {len(modified_content)}")
+            
+            sections.append({
+                'filename': filename,
+                'original': original_content,
+                'modified': modified_content
+            })
+        
+        debug_print(f"DEBUG: Returning {len(sections)} sections")
+        return sections
+    
+    def generate_line_edits(self, original_content: str, modified_content: str) -> list:
+        """Generate line-based edits by comparing original and modified content"""
+        # For simplicity, just return a complete replacement
+        # This is more reliable than complex diff parsing
+        return [{
+            'action': 'replace_all',
+            'content': modified_content
+        }]
+    
+    def assert_file_change_valid(self, file_path: str, original_content: str, new_content: str) -> dict:
+        """Validate that the file change is safe to apply"""
         try:
-            import re
-            import difflib
+            import os
             
-            # Extract analysis
-            analysis_match = re.search(r'ANALYSIS:\s*(.*?)(?=FILES TO MODIFY:|$)', ai_response, re.DOTALL)
-            analysis = analysis_match.group(1).strip() if analysis_match else "Analysis not provided"
+            # Basic validation of new content
+            if not new_content.strip():
+                return {
+                    'valid': False,
+                    'reason': 'New content is empty'
+                }
             
-            # Extract file changes
-            file_pattern = r'===\s*(.+?)\s*===\n(.*?)(?=\n===|\Z)'
-            file_matches = re.findall(file_pattern, ai_response, re.DOTALL)
+            # Check if parent directory exists for new files
+            if not os.path.exists(file_path):
+                parent_dir = os.path.dirname(file_path)
+                if parent_dir and not os.path.exists(parent_dir):
+                    return {
+                        'valid': False,
+                        'reason': f'Parent directory does not exist: {parent_dir}'
+                    }
             
-            if not file_matches:
-                return f"Analysis: {analysis}\n\n❌ No file changes detected in AI response."
+            return {'valid': True}
+            
+        except Exception as e:
+            return {
+                'valid': False,
+                'reason': f'Validation error: {e}'
+            }
+    
+    async def parse_before_after_response(self, ai_response: str) -> str:
+        """Parse before/after response format and prepare changes"""
+        try:
+            import os
+            
+            # Log the raw AI response
+            debug_print("=" * 50)
+            debug_print("RAW AI RESPONSE:")
+            debug_print("=" * 50)
+            debug_print(ai_response)
+            debug_print("=" * 50)
+            
+            # Check for "no changes needed" response
+            if "No changes needed" in ai_response:
+                debug_print("DEBUG: No changes needed detected")
+                return "✅ No changes needed based on your request."
+            
+            # Extract file sections
+            sections = self.parse_file_sections(ai_response)
+            debug_print(f"DEBUG: Found {len(sections)} file sections")
+            
+            for i, section in enumerate(sections):
+                debug_print(f"DEBUG: Section {i+1}:")
+                debug_print(f"  Filename: {section['filename']}")
+                debug_print(f"  Original length: {len(section['original'])} chars")
+                debug_print(f"  Modified length: {len(section['modified'])} chars")
+                debug_print(f"  Original preview: {section['original'][:100]}...")
+                debug_print(f"  Modified preview: {section['modified'][:100]}...")
+            
+            if not sections:
+                debug_print("DEBUG: No valid file changes found")
+                return "❌ No valid file changes found in AI response."
             
             # Prepare changes
-            changes = []
-            for file_path, new_content in file_matches:
-                file_path = file_path.strip()
-                new_content = new_content.strip()
-                
-                # Check if file exists
-                try:
-                    with open(file_path, 'r') as f:
-                        original_content = f.read()
-                    
-                    # Generate diff if file exists
-                    if original_content != new_content:
-                        original_lines = original_content.splitlines(True)
-                        new_lines = new_content.splitlines(True)
-                        
-                        diff = list(difflib.unified_diff(
-                            original_lines, new_lines,
-                            fromfile=f"original/{file_path}",
-                            tofile=f"modified/{file_path}",
-                            lineterm=''
-                        ))
-                        
-                        if diff:
-                            changes.append({
-                                'file_path': file_path,
-                                'new_content': new_content,
-                                'original_content': original_content,
-                                'action': 'modify'
-                            })
-                        
-                except FileNotFoundError:
-                    # New file
-                    changes.append({
-                        'file_path': file_path,
-                        'new_content': new_content,
-                        'original_content': '',
-                        'action': 'create'
-                    })
+            prepared_changes = []
+            validation_errors = []
             
-            if changes:
+            for section in sections:
+                file_path = section['filename']
+                original_content = section['original']
+                modified_content = section['modified']
+                
+                # Validate the change
+                validation = self.assert_file_change_valid(file_path, original_content, modified_content)
+                
+                if not validation['valid']:
+                    validation_errors.append(f"{file_path}: {validation['reason']}")
+                    continue
+                
+                # Generate line edits for display
+                edits = self.generate_line_edits(original_content, modified_content)
+                
+                prepared_changes.append({
+                    'file_path': file_path,
+                    'original_content': original_content,
+                    'new_content': modified_content,
+                    'action': 'create' if not os.path.exists(file_path) else 'modify',
+                    'edits': edits
+                })
+            
+            if validation_errors:
+                error_msg = "❌ Validation errors:\n" + "\n".join(validation_errors)
+                if not prepared_changes:
+                    return error_msg
+                else:
+                    error_msg += f"\n\n⚠️ Proceeding with {len(prepared_changes)} valid changes..."
+            
+            if prepared_changes:
                 # Store all pending changes
                 self.pending_changes = {
-                    'changes': changes,
-                    'analysis': analysis
+                    'changes': prepared_changes,
+                    'analysis': f"Parsed {len(sections)} file changes from AI response"
                 }
                 
-                result = f"Analysis: {analysis}\n\n"
-                result += f"Proposed changes to {len(changes)} file(s):\n\n"
+                result = f"📋 PROPOSED CHANGES ({len(prepared_changes)} file(s)):\n\n"
                 
-                for change in changes:
-                    if change['action'] == 'create':
-                        result += f"📝 CREATE: {change['file_path']}\n"
+                for i, change in enumerate(prepared_changes, 1):
+                    file_path = change['file_path']
+                    original_content = change['original_content']
+                    new_content = change['new_content']
+                    action = change['action']
+                    
+                    if action == 'create':
+                        result += f"📝 {i}. CREATE: {file_path}\n"
+                        result += f"   Content preview ({len(new_content)} chars):\n"
+                        # Show first few lines
+                        preview_lines = new_content.split('\n')[:5]
+                        for line in preview_lines:
+                            result += f"   + {line}\n"
+                        if len(new_content.split('\n')) > 5:
+                            result += f"   + ... ({len(new_content.split('\n')) - 5} more lines)\n"
                     else:
-                        result += f"✏️ MODIFY: {change['file_path']}\n"
+                        result += f"✏️ {i}. MODIFY: {file_path}\n"
+                        
+                        # Show diff preview
+                        original_lines = original_content.split('\n')
+                        new_lines = new_content.split('\n')
+                        
+                        result += f"   Changes: {len(original_lines)} → {len(new_lines)} lines\n"
+                        
+                        # Show a few key differences
+                        import difflib
+                        diff = list(difflib.unified_diff(original_lines, new_lines, lineterm='', n=2))
+                        diff_preview = []
+                        for line in diff:
+                            if line.startswith('---') or line.startswith('+++') or line.startswith('@@'):
+                                continue
+                            if line.startswith('-'):
+                                diff_preview.append(f"   - {line[1:]}")
+                            elif line.startswith('+'):
+                                diff_preview.append(f"   + {line[1:]}")
+                            if len(diff_preview) >= 6:  # Limit preview
+                                break
+                        
+                        if diff_preview:
+                            result += "\n".join(diff_preview[:6])
+                            if len(diff_preview) > 6:
+                                result += f"\n   ... ({len(diff_preview) - 6} more changes)"
+                        else:
+                            result += "   Complete file replacement"
+                    
+                    result += "\n\n"
                 
-                result += "\nType 'apply' to save all changes or 'cancel' to discard"
+                if validation_errors:
+                    result = error_msg + "\n\n" + result
+                
+                result += "💡 Type 'apply' to save all changes or 'cancel' to discard"
                 return result
             else:
-                return f"Analysis: {analysis}\n\n✅ No changes needed."
+                return "❌ No valid changes found after validation."
                 
         except Exception as e:
-            return f"Error parsing AI response: {e}"
+            return f"❌ Error parsing response: {e}\n\nRaw response:\n{ai_response[:500]}..."
     
     def get_all_project_files(self) -> list:
         """Get list of all project files"""
         all_files = []
+        debug_print("DEBUG: Scanning project files...")
+        
         try:
             for file_path in Path(".").rglob("*"):
                 if file_path.is_file():
                     # Skip hidden files, binary files, and common ignore patterns
                     if (not file_path.name.startswith('.') and 
-                        file_path.suffix not in ['.pyc', '.exe', '.bin', '.so', '.dll'] and
+                        file_path.suffix not in ['.pyc', '.exe', '.bin', '.so', '.dll', '.backup'] and
                         '__pycache__' not in str(file_path) and
-                        '.git' not in str(file_path)):
+                        '.git' not in str(file_path) and
+                        'terminal_debug.log' not in str(file_path)):
                         all_files.append(str(file_path))
-        except Exception:
-            pass
+                        
+            debug_print(f"DEBUG: Found {len(all_files)} project files")
+            for i, f in enumerate(all_files[:10]):  # Log first 10 files
+                debug_print(f"  {i+1}. {f}")
+            if len(all_files) > 10:
+                debug_print(f"  ... and {len(all_files) - 10} more files")
+                
+        except Exception as e:
+            debug_print(f"DEBUG: Error scanning files: {e}")
+            
         return all_files
     
     async def get_full_project_context(self) -> str:
         """Get context from all project files"""
+        debug_print("DEBUG: Building full project context...")
         context_parts = []
         
         try:
             all_files = self.get_all_project_files()
+            debug_print(f"DEBUG: Processing {len(all_files)} files for context")
             
-            for file_path in all_files:
+            for i, file_path in enumerate(all_files):
                 try:
                     with open(file_path, 'r', encoding='utf-8') as f:
                         content = f.read()
                     
                     # Only limit very large files
+                    original_length = len(content)
                     if len(content) > 5000:
-                        content = content[:5000] + f"\n... (file truncated, total length: {len(content)} chars)"
+                        content = content[:5000] + f"\n... (file truncated, total length: {original_length} chars)"
+                        debug_print(f"DEBUG: Truncated {file_path} from {original_length} to 5000 chars")
                     
                     context_parts.append(f"=== {file_path} ===\n{content}\n")
+                    
+                    if i % 10 == 0:  # Log progress every 10 files
+                        debug_print(f"DEBUG: Processed {i+1}/{len(all_files)} files")
                     
                 except (UnicodeDecodeError, PermissionError):
                     # Skip binary or inaccessible files
                     context_parts.append(f"=== {file_path} ===\n[Binary or inaccessible file]\n")
+                    debug_print(f"DEBUG: Skipped binary/inaccessible file: {file_path}")
                 except Exception as e:
                     context_parts.append(f"=== {file_path} ===\n[Error reading file: {e}]\n")
-        except Exception:
-            pass
+                    debug_print(f"DEBUG: Error reading {file_path}: {e}")
+        except Exception as e:
+            debug_print(f"DEBUG: Error in get_full_project_context: {e}")
         
-        return "\n".join(context_parts)
-    
-    async def get_project_context(self) -> str:
-        """Get context from project files (legacy method, kept for compatibility)"""
-        return await self.get_full_project_context()
+        total_context = "\n".join(context_parts)
+        debug_print(f"DEBUG: Built context with {len(total_context)} total characters")
+        debug_print(f"DEBUG: Context includes {len(context_parts)} file sections")
+        
+        return total_context
     
     async def apply_pending_changes(self):
-        """Apply all pending changes"""
+        """Apply all pending line-based changes"""
         if not self.pending_changes:
-            self.add_bubble("No changes to apply", "error")
+            self.update_chat("No changes to apply", "error")
             return
         
+        debug_print("DEBUG: Starting to apply changes...")
+        debug_print(f"DEBUG: Pending changes keys: {list(self.pending_changes.keys())}")
+        
+        # Show loading message
+        self.update_chat("Applying changes to files...", "loading")
+        
         try:
-            # Handle multiple file changes
+            # Handle line-based changes
             if 'changes' in self.pending_changes:
                 changes = self.pending_changes['changes']
+                debug_print(f"DEBUG: Applying {len(changes)} changes")
                 applied_files = []
                 
-                for change in changes:
+                for i, change in enumerate(changes, 1):
                     file_path = change['file_path']
                     new_content = change['new_content']
                     original_content = change['original_content']
                     action = change['action']
+                    
+                    debug_print(f"DEBUG: Change {i}: {action} {file_path}")
+                    debug_print(f"DEBUG: New content length: {len(new_content)} chars")
+                    debug_print(f"DEBUG: New content preview: {new_content[:100]}...")
                     
                     if action == 'create':
                         # Create new file
                         Path(file_path).parent.mkdir(parents=True, exist_ok=True)
                         with open(file_path, 'w') as f:
                             f.write(new_content)
-                        applied_files.append(f"✅ CREATED: {file_path}")
+                        
+                        lines_count = len(new_content.split('\n'))
+                        applied_files.append(f"✅ CREATED: {file_path} ({lines_count} lines)")
+                        debug_print(f"DEBUG: Created {file_path} with {lines_count} lines")
                         
                     elif action == 'modify':
                         # Create backup for existing file
@@ -392,13 +567,19 @@ class MCPMinimalEditor(App):
                         # Write new content
                         with open(file_path, 'w') as f:
                             f.write(new_content)
-                        applied_files.append(f"✅ MODIFIED: {file_path} (backup: {backup_path})")
+                        
+                        old_lines = len(original_content.split('\n'))
+                        new_lines = len(new_content.split('\n'))
+                        applied_files.append(f"✅ MODIFIED: {file_path} ({old_lines} → {new_lines} lines, backup: {backup_path})")
+                        debug_print(f"DEBUG: Modified {file_path}: {old_lines} → {new_lines} lines")
                 
-                result = f"Applied {len(applied_files)} changes:\n" + "\n".join(applied_files)
-                self.add_bubble(result, "ai")
+                # Show result
+                result = f"🎉 Successfully applied {len(applied_files)} changes:\n\n" + "\n".join(applied_files)
+                self.update_chat(result, "ai")
+                debug_print("DEBUG: All changes applied successfully")
                 
             else:
-                # Handle single file change (legacy)
+                # Handle legacy single file change
                 file_path = self.pending_changes['file_path']
                 new_content = self.pending_changes['new_content']
                 original_content = self.pending_changes['original_content']
@@ -412,16 +593,18 @@ class MCPMinimalEditor(App):
                 with open(file_path, 'w') as f:
                     f.write(new_content)
                 
-                self.add_bubble(f"✅ Changes applied! Backup: {backup_path}", "ai")
+                # Show result
+                self.update_chat(f"✅ Changes applied! Backup: {backup_path}", "ai")
             
             # Clear pending changes
             self.pending_changes = None
             
         except Exception as e:
-            self.add_bubble(f"Error applying changes: {e}", "error")
+            # Show error
+            self.update_chat(f"Error applying changes: {e}", "error")
     
-    def add_bubble(self, text: str, bubble_type: str):
-        """Add a chat bubble"""
+    def update_chat(self, text: str, message_type: str = "info"):
+        """Update chat area with new text"""
         chat = self.query_one("#chat", Static)
         current = chat.renderable if hasattr(chat, 'renderable') and chat.renderable else Text()
         
@@ -433,13 +616,13 @@ class MCPMinimalEditor(App):
             current.append("\n")
         
         # Style based on type
-        if bubble_type == "user":
+        if message_type == "user":
             current.append(f"💬 {text}", style="bold blue")
-        elif bubble_type == "ai":
+        elif message_type == "ai":
             current.append(f"🤖 {text}", style="bold green")
-        elif bubble_type == "thinking":
-            current.append(f"💭 {text}", style="italic yellow")
-        elif bubble_type == "error":
+        elif message_type == "loading":
+            current.append(f"⏳ {text}", style="italic cyan")
+        elif message_type == "error":
             current.append(f"❌ {text}", style="bold red")
         else:
             current.append(text, style="white")
@@ -449,7 +632,7 @@ class MCPMinimalEditor(App):
 
 
 def main():
-    app = MCPMinimalEditor()
+    app = Terminal()
     app.run()
 
 
