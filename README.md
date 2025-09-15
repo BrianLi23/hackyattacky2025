@@ -1,7 +1,7 @@
 # Puppeteer Project
 
 A Python project that uses the OpenAI API through Martian's router to interact with Cohere models.
-Check out the Devpost: https://devpost.com/software/puppeteer-7429qv
+- Check out the Devpost: https://devpost.com/software/puppeteer-7429qv
 
 ## Prerequisites
 
